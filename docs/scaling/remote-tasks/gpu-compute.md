@@ -72,20 +72,43 @@ specific GPUs. For more information, see guidance for [AWS Batch](aws-batch) and
 On AWS, you can use AWS-specific hardware accelerators, Trainium and Inferentia.
 For more details, see [a blog post outlining them in the context of Metaflow](https://aws.amazon.com/blogs/machine-learning/develop-and-train-large-models-cost-efficiently-with-metaflow-and-aws-trainium/).
 
-When using AWS Batch, you can request the accelerators simply by defining the number 
-of Trainium or Inferentia cores in `@batch`:
+When using AWS Batch, you can request the accelerators by defining the number
+of Trainium or Inferentia chips in `@batch`:
 
 * `@batch(trainium=16)`
 * `@batch(inferentia=16)`
 
-Note that Metaflow supports [distributed training](distributed-computing) over multiple
-Trainium instances. For detailed instructions, visit
-the [`metaflow-trainium` repository](https://github.com/outerbounds/metaflow-trainium/tree/main).
+When using `@kubernetes`, the same `trainium` parameter requests the corresponding
+number of Neuron devices from the cluster. Both Trainium and Inferentia chips
+register under a single Kubernetes resource — `aws.amazon.com/neuron` — managed
+by the [AWS Neuron device plugin](https://github.com/aws-neuron/aws-neuron-k8s-device-plugin):
 
-:::note
-Contact [Metaflow Slack](http://chat.metaflow.org) if you are interested in using Trainium
-of Inferentia with `@kubernetes`.
-:::
+* `@kubernetes(trainium=1, image="public.ecr.aws/neuron/pytorch-training-neuronx:...")` — Trainium
+* `@kubernetes(trainium=1, image="public.ecr.aws/neuron/pytorch-inference-neuronx:...")` — Inferentia
+
+The cluster needs the Neuron device plugin DaemonSet running on Neuron-labeled nodes,
+and the nodegroup's instance type must be a Neuron family member (`trn1`, `trn1n`,
+`trn2.48xlarge`, `inf1`, `inf2`). Note that as of 2026, only `trn1.*`, `trn1n.32xlarge`,
+and `inf1`/`inf2` are broadly available on-demand across multiple regions; `trn2.48xlarge`
+is currently only available via [EC2 Capacity Blocks for ML](https://aws.amazon.com/ec2/capacityblocks/)
+in the `us-east-2` region.
+
+#### High-bandwidth networking with EFA
+
+For multi-node training, Metaflow supports requesting [Elastic Fabric Adapter](https://aws.amazon.com/hpc/efa/)
+network interfaces on Kubernetes via the `efa` parameter:
+
+* `@kubernetes(gpu=8, efa=32)` — claim a full p5.48xlarge node with all 32 EFA NICs
+* `@kubernetes(trainium=16, efa=8)` — full trn1.32xlarge node with 8 EFA NICs
+
+EFA exposes `vpc.amazonaws.com/efa` as a schedulable resource managed by the
+[AWS EFA k8s device plugin](https://github.com/aws/eks-charts/tree/master/stable/aws-efa-k8s-device-plugin).
+Combined with NCCL via `aws-ofi-nccl`, this gives multi-node training the
+high-bandwidth, low-latency RDMA path that AWS markets for these instance types.
+
+Metaflow supports [distributed training](distributed-computing) over multiple
+Trainium or GPU instances. For detailed instructions, visit
+the [`metaflow-trainium` repository](https://github.com/outerbounds/metaflow-trainium/tree/main).
 
 
 ### Using Google's Tensor Processing Units (TPUs)
